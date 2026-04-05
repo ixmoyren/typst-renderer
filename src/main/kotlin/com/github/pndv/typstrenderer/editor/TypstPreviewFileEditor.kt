@@ -1,11 +1,13 @@
 package com.github.pndv.typstrenderer.editor
 
 import com.github.pndv.typstrenderer.lsp.TinymistManager
+import com.github.pndv.typstrenderer.lsp.TypstDownloadService
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -86,7 +88,19 @@ class TypstPreviewFileEditor(
     private fun startWatching() {
         val typstBinary = TinymistManager.getInstance().resolveTypstPath()
         if (typstBinary == null) {
-            browser?.loadHTML(errorHtml("Typst CLI not found. Install it or configure the path in Settings > Tools > Typst."))
+            browser?.loadHTML(waitingHtml("Downloading Typst CLI..."))
+            TypstDownloadService.getInstance().downloadInBackground(project) { success ->
+                if (success) {
+                    ApplicationManager.getApplication().invokeLater {
+                        startWatching()
+                    }
+                } else {
+                    browser?.loadHTML(errorHtml(
+                        "Typst CLI not found and auto-download failed. " +
+                        "Install it or configure the path in Settings &gt; Tools &gt; Typst."
+                    ))
+                }
+            }
             return
         }
 
@@ -174,13 +188,13 @@ class TypstPreviewFileEditor(
 
     // ---- Utility HTML pages ----
 
-    private fun waitingHtml(): String = """
+    private fun waitingHtml(message: String = "Compiling...", detail: String = "Waiting for typst to generate the PDF."): String = """
         <html>
         <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
                      font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#888;background:#2b2b2b;">
             <div style="text-align:center;">
-                <p style="font-size:16px;">Compiling...</p>
-                <p style="font-size:13px;">Waiting for typst to generate the PDF.</p>
+                <p style="font-size:16px;">$message</p>
+                <p style="font-size:13px;">$detail</p>
             </div>
         </body>
         </html>

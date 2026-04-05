@@ -2,6 +2,7 @@ package com.github.pndv.typstrenderer.settings
 
 import com.github.pndv.typstrenderer.lsp.TinymistDownloadService
 import com.github.pndv.typstrenderer.lsp.TinymistManager
+import com.github.pndv.typstrenderer.lsp.TypstDownloadService
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.ui.components.JBLabel
@@ -54,6 +55,14 @@ class TypstSettingsConfigurable : Configurable {
                     .comment("Path to the typst CLI binary. Leave empty for auto-detection.")
             }
             row {
+                button("Download Typst") {
+                    typstStatusLabel?.text = "Downloading..."
+                    TypstDownloadService.getInstance().downloadInBackground(null) { success ->
+                        typstStatusLabel?.text = if (success) getTypstStatusText() else "Download failed"
+                    }
+                }.comment("Downloads the latest Typst CLI binary from GitHub for this platform.")
+            }
+            row {
                 checkBox("Auto-compile on save")
                     .bindSelected(::autoCompileOnSave)
             }
@@ -98,7 +107,7 @@ class TypstSettingsConfigurable : Configurable {
         return if (resolvedPath != null) {
             "✓ Found: $resolvedPath"
         } else {
-            "✗ Not found — install via: cargo install typst-cli"
+            "✗ Not found (will auto-download when needed)"
         }
     }
 }

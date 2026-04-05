@@ -1,6 +1,7 @@
 package com.github.pndv.typstrenderer.compile
 
 import com.github.pndv.typstrenderer.lsp.TinymistManager
+import com.github.pndv.typstrenderer.lsp.TypstDownloadService
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.notification.NotificationGroupManager
@@ -14,13 +15,19 @@ class TypstCompileService(private val project: Project) {
     fun compile(inputPath: String, outputPath: String? = null) {
         val typstBinary = TinymistManager.getInstance().resolveTypstPath()
         if (typstBinary == null) {
-            NotificationGroupManager.getInstance()
-                .getNotificationGroup("Typst")
-                .createNotification(
-                    "Typst not found",
-                    "Typst CLI not found. Install it via: cargo install typst-cli, or configure the path in Settings > Tools > Typst.",
-                    NotificationType.ERROR
-                ).notify(project)
+            TypstDownloadService.getInstance().downloadInBackground(project) { success ->
+                if (success) {
+                    compile(inputPath, outputPath)
+                } else {
+                    NotificationGroupManager.getInstance()
+                        .getNotificationGroup("Typst")
+                        .createNotification(
+                            "Typst not found",
+                            "Typst CLI not found and auto-download failed. Configure the path in Settings > Tools > Typst.",
+                            NotificationType.ERROR
+                        ).notify(project)
+                }
+            }
             return
         }
 

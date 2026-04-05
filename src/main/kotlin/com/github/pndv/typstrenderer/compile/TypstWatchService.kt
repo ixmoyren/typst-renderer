@@ -1,6 +1,7 @@
 package com.github.pndv.typstrenderer.compile
 
 import com.github.pndv.typstrenderer.lsp.TinymistManager
+import com.github.pndv.typstrenderer.lsp.TypstDownloadService
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
@@ -26,7 +27,15 @@ class TypstWatchService(private val project: Project) : Disposable {
     fun startWatch(inputPath: String) {
         stopWatch()
 
-        val typstBinary = TinymistManager.getInstance().resolveTypstPath() ?: return
+        val typstBinary = TinymistManager.getInstance().resolveTypstPath()
+        if (typstBinary == null) {
+            TypstDownloadService.getInstance().downloadInBackground(project) { success ->
+                if (success) {
+                    startWatch(inputPath)
+                }
+            }
+            return
+        }
 
         val commandLine = GeneralCommandLine(typstBinary, "watch", inputPath).apply {
             withCharset(Charsets.UTF_8)

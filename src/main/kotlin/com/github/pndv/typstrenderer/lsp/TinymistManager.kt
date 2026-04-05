@@ -10,7 +10,7 @@ import java.io.File
  * Resolves the tinymist and typst binary paths using the following priority:
  * 1. User-configured path in settings
  * 2. Binary found on system PATH and well-known install locations
- * 3. (tinymist only) Previously downloaded binary in the plugin data directory
+ * 3. Previously downloaded binary in the plugin data directory
  * 4. `null` (not found)
  *
  * Note: IntelliJ as a GUI app on macOS/Windows may not inherit the user's full shell/terminal
@@ -52,7 +52,15 @@ class TinymistManager {
         }
 
         // 2. Found on system PATH + well-known locations
-        return findBinary("typst")
+        findBinary("typst")?.let { return it }
+
+        // 3. Previously downloaded binary
+        val downloadedBinary = getDownloadedTypstPath()
+        if (isBinaryExecutable(downloadedBinary)) {
+            return downloadedBinary.absolutePath
+        }
+
+        return null
     }
 
     /**
@@ -77,6 +85,14 @@ class TinymistManager {
         return File(getDownloadDir(), binaryName)
     }
 
+    /**
+     * Returns the expected path for the downloaded typst CLI binary.
+     */
+    fun getDownloadedTypstPath(): File {
+        val binaryName = if (isWindows()) "typst.exe" else "typst"
+        return File(getDownloadDir(), binaryName)
+    }
+
     companion object {
         fun getInstance(): TinymistManager =
             ApplicationManager.getApplication().getService(TinymistManager::class.java)
@@ -96,6 +112,22 @@ class TinymistManager {
                 isLinux() && isArm64() -> "tinymist-linux-arm64"
                 isLinux() -> "tinymist-linux-x64"
                 isWindows() -> "tinymist-win32-x64.exe"
+                else -> null
+            }
+        }
+
+        /**
+         * Determines the GitHub release asset name for the Typst CLI on the current platform.
+         * Typst releases are compressed archives (.tar.xz on Unix, .zip on Windows).
+         */
+        fun getTypstPlatformAssetName(): String? {
+            return when {
+                isMacOS() && isArm64() -> "typst-aarch64-apple-darwin.tar.xz"
+                isMacOS() -> "typst-x86_64-apple-darwin.tar.xz"
+                isLinux() && isArm64() -> "typst-aarch64-unknown-linux-musl.tar.xz"
+                isLinux() -> "typst-x86_64-unknown-linux-musl.tar.xz"
+                isWindows() && isArm64() -> "typst-aarch64-pc-windows-msvc.zip"
+                isWindows() -> "typst-x86_64-pc-windows-msvc.zip"
                 else -> null
             }
         }
