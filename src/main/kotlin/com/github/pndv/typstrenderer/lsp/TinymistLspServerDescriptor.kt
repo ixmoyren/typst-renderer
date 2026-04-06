@@ -11,6 +11,8 @@ class TinymistLspServerDescriptor(
     private val tinymistPath: String
 ) : ProjectWideLspServerDescriptor(project, "Tinymist") {
 
+    override val lspCustomization = TinymistCustomisation()
+
     override fun isSupportedFile(file: VirtualFile): Boolean =
         file.fileType == TypstFileType
 
