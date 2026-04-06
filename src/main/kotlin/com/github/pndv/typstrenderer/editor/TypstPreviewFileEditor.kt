@@ -21,13 +21,12 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefApp
+import com.intellij.util.io.BaseOutputReader
 import java.beans.PropertyChangeListener
 import java.io.File
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.SwingConstants
-
-private val LOG = logger<TypstPreviewFileEditor>()
 
 /**
  * A file editor that shows a live PDF preview of a Typst file.
@@ -40,6 +39,8 @@ class TypstPreviewFileEditor(
     private val project: Project,
     private val file: VirtualFile
 ) : UserDataHolderBase(), FileEditor {
+
+    private val LOG = logger<TypstPreviewFileEditor>()
 
     private val jcefSupported = JBCefApp.isSupported()
     private val browser: JBCefBrowser? = if (jcefSupported) JBCefBrowser() else null
@@ -86,19 +87,29 @@ class TypstPreviewFileEditor(
     // ---- typst watch process ----
 
     private fun startWatching() {
+        if (project.isDisposed || !file.isValid) {
+            return
+        }
+
         val typstBinary = TinymistManager.getInstance().resolveTypstPath()
         if (typstBinary == null) {
             browser?.loadHTML(waitingHtml("Downloading Typst CLI..."))
             TypstDownloadService.getInstance().downloadInBackground(project) { success ->
+                if (project.isDisposed || !file.isValid) return@downloadInBackground
+
                 if (success) {
                     ApplicationManager.getApplication().invokeLater {
-                        startWatching()
+                        if (!project.isDisposed && file.isValid) {
+                            startWatching()
+                        }
                     }
                 } else {
-                    browser?.loadHTML(errorHtml(
-                        "Typst CLI not found and auto-download failed. " +
-                        "Install it or configure the path in Settings &gt; Tools &gt; Typst."
-                    ))
+                    browser?.loadHTML(
+                        errorHtml(
+                            "Typst CLI not found and auto-download failed. " +
+                            "Install it or configure the path in Settings &gt; Tools &gt; Typst."
+                        )
+                    )
                 }
             }
             return
@@ -112,7 +123,10 @@ class TypstPreviewFileEditor(
         }
 
         try {
-            val handler = OSProcessHandler(commandLine)
+            val handler = object : OSProcessHandler(commandLine) {
+                override fun readerOptions(): BaseOutputReader.Options =
+                    BaseOutputReader.Options.forMostlySilentProcess()
+            }
 
             handler.addProcessListener(object : ProcessListener {
                 override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
@@ -144,9 +158,15 @@ class TypstPreviewFileEditor(
             } else {
                 browser?.loadHTML(waitingHtml())
             }
-        } catch (e: Exception) {
-            LOG.warn("Failed to start typst watch", e)
-            browser?.loadHTML(errorHtml("Failed to start typst watch: ${e.message}"))
+        } catch (t: Throwable) {
+            LOG.warn("Failed to start typst watch for ${file.path}", t)
+            browser?.loadHTML(
+                errorHtml(
+                    "Failed to start Typst preview.<br>" +
+                            "Check that the Typst executable is valid and runnable.<br>" +
+                            "Details: ${t.message ?: t::class.java.name}"
+                )
+            )
         }
     }
 
@@ -187,8 +207,8 @@ class TypstPreviewFileEditor(
     }
 
     // ---- Utility HTML pages ----
-
-    private fun waitingHtml(message: String = "Compiling...", detail: String = "Waiting for typst to generate the PDF."): String = """
+    private fun waitingHtml(message: String = "Compiling...",
+                            detail: String = "Waiting for typst to generate the PDF."): String = """
         <html>
         <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
                      font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#888;background:#2b2b2b;">

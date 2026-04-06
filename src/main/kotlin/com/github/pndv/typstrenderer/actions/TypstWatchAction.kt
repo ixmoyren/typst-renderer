@@ -1,5 +1,6 @@
 package com.github.pndv.typstrenderer.actions
 
+import com.github.pndv.typstrenderer.TypstBundle
 import com.github.pndv.typstrenderer.compile.TypstWatchService
 import com.github.pndv.typstrenderer.language.TypstFileType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -34,10 +35,10 @@ class TypstWatchAction : AnAction() {
         val watchService = project.service<TypstWatchService>()
         if (watchService.isWatching) {
             e.presentation.isEnabledAndVisible = true
-            e.presentation.text = "Stop Typst Watch"
+            e.presentation.text = TypstBundle.message("watch.action.text.stop")
         } else {
             e.presentation.isEnabledAndVisible = file?.fileType == TypstFileType
-            e.presentation.text = "Watch Typst File"
+            e.presentation.text = TypstBundle.message("watch.action.text")
         }
     }
 

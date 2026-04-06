@@ -23,18 +23,20 @@ class TinymistLspServerSupportProvider : LspServerSupportProvider {
         val tinymistPath = manager.resolveTinymistPath()
 
         if (tinymistPath != null) {
-            LOG.info("Starting tinymist LSP from: $tinymistPath")
+            LOG.info("Starting tinymist LSP from: $tinymistPath for file ${file.path}")
             serverStarter.ensureServerStarted(TinymistLspServerDescriptor(project, tinymistPath))
         } else {
-            LOG.info("Tinymist not found, triggering auto-download")
+            LOG.info("Tinymist not found, triggering auto-download for file ${file.path}")
             TinymistDownloadService.getInstance().downloadInBackground(project) { success ->
                 if (success) {
                     // After download, resolve again and start the server
                     val downloadedPath = manager.resolveTinymistPath()
                     if (downloadedPath != null) {
+                        LOG.info("Tinymist downloaded successfully, starting LSP from: $downloadedPath")
                         serverStarter.ensureServerStarted(TinymistLspServerDescriptor(project, downloadedPath))
                     }
                 } else {
+                    LOG.warn("Tinymist download failed; LSP server will not be started")
                     NotificationGroupManager.getInstance()
                         .getNotificationGroup("Typst")
                         .createNotification(

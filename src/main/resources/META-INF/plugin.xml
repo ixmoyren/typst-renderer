@@ -61,8 +61,8 @@
 
         <action id="Typst.Watch"
                 class="com.github.pndv.typstrenderer.actions.TypstWatchAction"
-                text="Watch Typst File"
-                description="Watch the current Typst file for changes and auto-compile"
+                text="%watch.action.text"
+                description="%watch.action.description"
                 icon="AllIcons.Actions.Restart">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
