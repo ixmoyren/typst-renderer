@@ -4,10 +4,14 @@ import com.github.pndv.typstrenderer.lsp.TinymistManager
 import com.github.pndv.typstrenderer.lsp.TypstDownloadService
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.execution.ui.ConsoleView
+import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.wm.ToolWindowManager
 
 @Service(Service.Level.PROJECT)
 class TypstCompileService(private val project: Project) {
@@ -62,15 +66,29 @@ class TypstCompileService(private val project: Project) {
                     stderr,
                     NotificationType.ERROR
                 ).notify(project)
+                printErrorToConsole("Compilation failed:\n$stderr\n")
             }
         } catch (e: Exception) {
+            val message = "Failed to run typst: ${e.message}"
             NotificationGroupManager.getInstance()
                 .getNotificationGroup("Typst")
                 .createNotification(
                     "Typst error",
-                    "Failed to run typst: ${e.message}",
+                    message,
                     NotificationType.ERROR
                 ).notify(project)
+            printErrorToConsole("$message\n")
+        }
+    }
+
+    private fun printErrorToConsole(text: String) {
+        ApplicationManager.getApplication().invokeLater {
+            if (project.isDisposed) return@invokeLater
+            val toolWindow = ToolWindowManager.getInstance(project)
+                .getToolWindow("Typst Output") ?: return@invokeLater
+            toolWindow.show()
+            val content = toolWindow.contentManager.getContent(0) ?: return@invokeLater
+            (content.component as? ConsoleView)?.print(text, ConsoleViewContentType.ERROR_OUTPUT)
         }
     }
 }

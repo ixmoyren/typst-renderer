@@ -7,6 +7,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
 import com.intellij.platform.lsp.api.customization.LspCustomization
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
+import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
+import com.intellij.psi.PsiFile
 
 class TinymistLspServerDescriptor(
     project: Project, private val tinymistPath: String
@@ -24,6 +26,7 @@ class TinymistLspServerDescriptor(
      * formatting for Typst files, regardless of whether the IDE has its own formatter.
      */
     override val lspCustomization = object : LspCustomization() {
+
         override val formattingCustomizer = object : LspFormattingSupport() {
             override fun shouldFormatThisFileExclusivelyByServer(
                 file: VirtualFile,
@@ -32,6 +35,10 @@ class TinymistLspServerDescriptor(
             ): Boolean {
                 return file.fileType == TypstFileType
             }
+        }
+
+        override val semanticTokensCustomizer = object : LspSemanticTokensSupport() {
+            override fun shouldAskServerForSemanticTokens(psiFile: PsiFile): Boolean = true
         }
     }
 

@@ -16,7 +16,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.util.zip.ZipInputStream
 
-private val LOG = logger<TypstDownloadService>()
+private val log = logger<TypstDownloadService>()
 
 /**
  * Downloads the Typst CLI binary from GitHub releases.
@@ -92,7 +92,7 @@ class TypstDownloadService {
                     indicator.fraction = 1.0
                     indicator.text = "Typst CLI downloaded successfully"
 
-                    LOG.info("Typst CLI downloaded to: ${targetBinary.absolutePath}")
+                    log.info("Typst CLI downloaded to: ${targetBinary.absolutePath}")
 
                     NotificationGroupManager.getInstance()
                         .getNotificationGroup("Typst")
@@ -106,9 +106,9 @@ class TypstDownloadService {
 
                 } catch (e: Exception) {
                     if (indicator.isCanceled) {
-                        LOG.info("Typst CLI download cancelled by user")
+                        log.info("Typst CLI download cancelled by user")
                     } else {
-                        LOG.warn("Failed to download Typst CLI", e)
+                        log.warn("Failed to download Typst CLI", e)
                         notifyError(project, "Download failed: ${e.message}")
                     }
                     onComplete?.let { ApplicationManager.getApplication().invokeLater { it(false) } }
@@ -131,7 +131,7 @@ class TypstDownloadService {
                 .tryConnect()
             url
         } catch (e: IOException) {
-            LOG.warn("Could not resolve download URL for $assetName: ${e.message}")
+            log.warn("Could not resolve download URL for $assetName: ${e.message}")
             null
         }
     }

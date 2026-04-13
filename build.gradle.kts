@@ -30,7 +30,7 @@ repositories {
 }
 
 
-// Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/version_catalogs.html
+// Dependencies are managed with Gradle version catalogue - read more: https://docs.gradle.org/current/userguide/version_catalogs.html
 dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter.api)

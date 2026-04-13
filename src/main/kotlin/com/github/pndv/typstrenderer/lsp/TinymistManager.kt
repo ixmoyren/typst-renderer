@@ -64,11 +64,6 @@ class TinymistManager {
     }
 
     /**
-     * Whether tinymist is available through any of the resolution strategies.
-     */
-    fun isAvailable(): Boolean = resolveTinymistPath() != null
-
-    /**
      * Returns the directory where the downloaded tinymist binary is stored.
      */
     fun getDownloadDir(): File {
@@ -97,10 +92,12 @@ class TinymistManager {
         fun getInstance(): TinymistManager =
             ApplicationManager.getApplication().getService(TinymistManager::class.java)
 
-        fun isWindows(): Boolean = System.getProperty("os.name").lowercase().contains("win")
-        fun isMacOS(): Boolean = System.getProperty("os.name").lowercase().contains("mac")
-        fun isLinux(): Boolean = System.getProperty("os.name").lowercase().contains("linux")
-        fun isArm64(): Boolean = System.getProperty("os.arch").let { it == "aarch64" || it == "arm64" }
+        val osName: String? = System.getProperty("os.name")
+        val osArch: String? = System.getProperty("os.arch")
+        fun isWindows(): Boolean = osName?.lowercase()?.contains("win") ?: false
+        fun isMacOS(): Boolean = osName?.lowercase()?.contains("mac") ?: false
+        fun isLinux(): Boolean = osName?.lowercase()?.contains("linux") ?: false
+        fun isArm64(): Boolean = osArch?.let { it == "aarch64" || it == "arm64" } ?: false
 
         /**
          * Determines the GitHub release asset name for the current platform.

@@ -18,9 +18,26 @@
                 language="Typst"
                 extensions="typ"/>
 
+        <!-- Minimal parser definition (binds .typ files to TypstLanguage at the PSI level) -->
+        <lang.parserDefinition language="Typst"
+                               implementationClass="com.github.pndv.typstrenderer.language.TypstParserDefinition"/>
+
+        <!-- Syntax highlighter (provides token boundaries for LSP semantic-token overlay) -->
+        <lang.syntaxHighlighterFactory language="Typst"
+                                       implementationClass="com.github.pndv.typstrenderer.language.TypstSyntaxHighlighterFactory"/>
+
+        <!-- Comment toggling (Ctrl+/ and Ctrl+Shift+/) -->
+        <lang.commenter language="Typst"
+                        implementationClass="com.github.pndv.typstrenderer.language.TypstCommenter"/>
+
         <!-- LSP support via tinymist -->
         <platform.lsp.serverSupportProvider
                 implementation="com.github.pndv.typstrenderer.lsp.TinymistLspServerSupportProvider"/>
+
+        <!-- Rename via LSP (IntelliJ's LSP module does not support textDocument/rename) -->
+        <renameHandler implementation="com.github.pndv.typstrenderer.lsp.TypstLspRenameHandler"
+                       id="TypstLspRenameHandler" order="first"/>
+
 
         <!-- Settings -->
         <applicationService
@@ -48,11 +65,11 @@
                            key="notification.group.typst"/>
     </extensions>
 
-    <actions>
+    <actions resource-bundle="messages.TypstBundle">
         <action id="Typst.Compile"
                 class="com.github.pndv.typstrenderer.actions.TypstCompileAction"
-                text="Compile Typst File"
-                description="Compile the current Typst file to PDF"
+                text="%compile.action.text"
+                description="%compile.action.description"
                 icon="AllIcons.Actions.Execute">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>

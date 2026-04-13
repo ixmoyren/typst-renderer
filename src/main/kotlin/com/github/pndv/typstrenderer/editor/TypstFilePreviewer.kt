@@ -2,13 +2,18 @@ package com.github.pndv.typstrenderer.editor
 
 import com.github.pndv.typstrenderer.lsp.TinymistManager
 import com.github.pndv.typstrenderer.lsp.TypstDownloadService
+import com.github.pndv.typstrenderer.theme.TypstThemeListener
+import com.github.pndv.typstrenderer.theme.TypstThemeService
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
+import com.intellij.execution.ui.ConsoleView
+import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
@@ -19,13 +24,15 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
-import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.jcef.JBCefApp
+import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.util.io.BaseOutputReader
+import org.cef.handler.CefLoadHandlerAdapter
 import java.beans.PropertyChangeListener
 import java.io.File
 import javax.swing.JComponent
-import javax.swing.JLabel
 import javax.swing.SwingConstants
 
 /**
@@ -35,19 +42,24 @@ import javax.swing.SwingConstants
  * the output PDF in a JCEF (embedded Chromium) browser panel.
  * The preview auto-refreshes whenever typst recompiles the PDF.
  */
-class TypstPreviewFileEditor(
+class TypstFilePreviewer(
     private val project: Project,
     private val file: VirtualFile
 ) : UserDataHolderBase(), FileEditor {
 
-    private val LOG = logger<TypstPreviewFileEditor>()
+    private val log = logger<TypstFilePreviewer>()
 
+    private var currentPdfUrl: String? = null
     private val jcefSupported = JBCefApp.isSupported()
+
+    //    private val browser: JCEFHtmlPanel? = if (jcefSupported) JCEFHtmlPanel(currentPdfUrl) else null
     private val browser: JBCefBrowser? = if (jcefSupported) JBCefBrowser() else null
-    private val fallbackLabel = JLabel("JCEF is not supported — PDF preview is unavailable.", SwingConstants.CENTER)
+    private val fallbackLabel = JBLabel("JCEF is not supported — PDF preview is unavailable.", SwingConstants.CENTER)
 
     private var processHandler: OSProcessHandler? = null
     private val outputPdf: File
+
+    private val isDark get() = EditorColorsManager.getInstance().isDarkEditor
 
     init {
         // Output PDF goes next to the source file in a temp dir to avoid polluting the project
@@ -58,9 +70,45 @@ class TypstPreviewFileEditor(
 
         if (jcefSupported) {
             browser?.let { Disposer.register(this, it) }
+            installDarkModeInjector()
+            listenForThemeChanges()
             startWatching()
             listenForPdfChanges()
         }
+    }
+
+    /** Injects `color-scheme: dark` into every loaded page when the IDE is in dark mode.
+     *  This makes Chromium's built-in PDF viewer switch to its dark appearance. */
+    private fun installDarkModeInjector() {
+        val cefBrowser = browser?.cefBrowser ?: return
+        browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
+            override fun onLoadEnd(
+                b: org.cef.browser.CefBrowser,
+                frame: org.cef.browser.CefFrame,
+                httpStatusCode: Int
+            ) {
+                if (isDark) {
+                    b.executeJavaScript(
+                        "document.documentElement.style.colorScheme='dark';",
+                        b.url, 0
+                    )
+                }
+            }
+        }, cefBrowser)
+    }
+
+    /** Reloads the browser content with updated theme colours whenever the IDE theme changes. */
+    private fun listenForThemeChanges() {
+        ApplicationManager.getApplication().messageBus
+            .connect(this)
+            .subscribe(TypstThemeService.TOPIC, TypstThemeListener { _ ->
+                ApplicationManager.getApplication().invokeLater {
+                    val url = currentPdfUrl
+                    if (url != null) {
+                        browser?.loadURL(url)
+                    }
+                }
+            })
     }
 
     // ---- FileEditor interface ----
@@ -107,7 +155,7 @@ class TypstPreviewFileEditor(
                     browser?.loadHTML(
                         errorHtml(
                             "Typst CLI not found and auto-download failed. " +
-                            "Install it or configure the path in Settings &gt; Tools &gt; Typst."
+                                    "Install it or configure the path in Settings &gt; Tools &gt; Typst."
                         )
                     )
                 }
@@ -133,24 +181,48 @@ class TypstPreviewFileEditor(
                     val text = event.text.trim()
                     if (text.isEmpty()) return
 
+                    log.info("typst watch ${if (outputType == ProcessOutputTypes.STDERR) "stderr" else "stdout"}: $text")
+
+                    // Route all output to the Typst Output tool window
+                    val contentType = when (outputType) {
+                        ProcessOutputTypes.STDERR -> ConsoleViewContentType.ERROR_OUTPUT
+                        ProcessOutputTypes.SYSTEM -> ConsoleViewContentType.SYSTEM_OUTPUT
+                        else -> ConsoleViewContentType.NORMAL_OUTPUT
+                    }
+                    getConsoleView()?.print(event.text, contentType)
+
+                    // Show errors in the browser panel and open the tool window
                     if (outputType == ProcessOutputTypes.STDERR && text.contains("error", ignoreCase = true)) {
-                        LOG.info("typst watch stderr: $text")
+                        ApplicationManager.getApplication().invokeLater {
+                            if (!project.isDisposed) {
+                                ToolWindowManager.getInstance(project).getToolWindow("Typst Output")?.show()
+                                browser?.loadHTML(errorHtml("Compilation error — see the Typst Output panel for details."))
+                            }
+                        }
                     }
 
                     // When typst finishes a compilation, reload the PDF
-                    if (text.contains("writing to", ignoreCase = true) || text.contains("compiled", ignoreCase = true)) {
+                    if (text.contains("writing to", ignoreCase = true) || text.contains(
+                            "compiled",
+                            ignoreCase = true
+                        )
+                    ) {
+                        log.info("Detected compilation output, reloading PDF for ${file.name}")
                         reloadPdf()
                     }
                 }
 
                 override fun processTerminated(event: ProcessEvent) {
-                    LOG.info("typst watch process terminated with exit code ${event.exitCode}")
+                    getConsoleView()?.print(
+                        "\nPreview process terminated with exit code ${event.exitCode}\n",
+                        ConsoleViewContentType.SYSTEM_OUTPUT
+                    )
                 }
             })
 
             handler.startNotify()
             processHandler = handler
-            LOG.info("Started typst watch for ${file.path} -> ${outputPdf.absolutePath}")
+            log.info("Started typst watch for ${file.path} -> ${outputPdf.absolutePath}")
 
             // If a PDF already exists from a previous session, show it immediately
             if (outputPdf.exists() && outputPdf.length() > 0) {
@@ -159,7 +231,7 @@ class TypstPreviewFileEditor(
                 browser?.loadHTML(waitingHtml())
             }
         } catch (t: Throwable) {
-            LOG.warn("Failed to start typst watch for ${file.path}", t)
+            log.warn("Failed to start typst watch for ${file.path}", t)
             browser?.loadHTML(
                 errorHtml(
                     "Failed to start Typst preview.<br>" +
@@ -168,6 +240,12 @@ class TypstPreviewFileEditor(
                 )
             )
         }
+    }
+
+    private fun getConsoleView(): ConsoleView? {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Typst Output") ?: return null
+        val content = toolWindow.contentManager.getContent(0) ?: return null
+        return content.component as? ConsoleView
     }
 
     private fun stopWatching() {
@@ -196,39 +274,57 @@ class TypstPreviewFileEditor(
     }
 
     // ---- Reload the PDF in the JCEF browser ----
-
     private fun reloadPdf() {
         if (!jcefSupported || browser == null) return
         if (!outputPdf.exists() || outputPdf.length() == 0L) return
 
-        // JCEF/Chromium has a built-in PDF viewer; just load the file URL
-        val fileUrl = outputPdf.toURI().toString()
-        browser.loadURL(fileUrl)
+        // Cache-bust: append a unique fragment so Chromium always re-reads from disk
+        val baseUrl = outputPdf.toURI().toString()
+        val fileUrl = "$baseUrl#t=${System.currentTimeMillis()}"
+        currentPdfUrl = baseUrl
+        log.info("Loading PDF: $fileUrl (size=${outputPdf.length()})")
+        ApplicationManager.getApplication().invokeLater {
+            if (!project.isDisposed) {
+                browser.loadURL(fileUrl)
+                browser.cefBrowser.reloadIgnoreCache()
+            }
+        }
     }
 
     // ---- Utility HTML pages ----
-    private fun waitingHtml(message: String = "Compiling...",
-                            detail: String = "Waiting for typst to generate the PDF."): String = """
-        <html>
-        <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
-                     font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#888;background:#2b2b2b;">
-            <div style="text-align:center;">
-                <p style="font-size:16px;">$message</p>
-                <p style="font-size:13px;">$detail</p>
-            </div>
-        </body>
-        </html>
-    """.trimIndent()
 
-    private fun errorHtml(message: String): String = """
-        <html>
-        <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
-                     font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#cc4444;background:#2b2b2b;">
-            <div style="text-align:center;max-width:500px;padding:20px;">
-                <p style="font-size:16px;font-weight:bold;">Preview Error</p>
-                <p style="font-size:13px;color:#aaa;">${message.replace("<", "&lt;")}</p>
-            </div>
-        </body>
-        </html>
-    """.trimIndent()
+    private fun waitingHtml(
+        message: String = "Compiling...",
+        detail: String = "Waiting for typst to generate the PDF."
+    ): String {
+        val (bg, fg, fgSub) = if (isDark) Triple("#2b2b2b", "#aaaaaa", "#777777")
+        else Triple("#f5f5f5", "#555555", "#888888")
+        return """
+            <html>
+            <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
+                         font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:$fg;background:$bg;">
+                <div style="text-align:center;">
+                    <p style="font-size:16px;">$message</p>
+                    <p style="font-size:13px;color:$fgSub;">$detail</p>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun errorHtml(message: String): String {
+        val (bg, fgSub) = if (isDark) Pair("#2b2b2b", "#aaaaaa")
+        else Pair("#f5f5f5", "#666666")
+        return """
+            <html>
+            <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;
+                         font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#cc4444;background:$bg;">
+                <div style="text-align:center;max-width:500px;padding:20px;">
+                    <p style="font-size:16px;font-weight:bold;">Preview Error</p>
+                    <p style="font-size:13px;color:$fgSub;">${message.replace("<", "&lt;")}</p>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
 }
