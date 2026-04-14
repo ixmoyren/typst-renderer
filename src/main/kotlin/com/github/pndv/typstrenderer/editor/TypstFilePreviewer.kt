@@ -163,8 +163,16 @@ class TypstFilePreviewer(
             return
         }
 
+        log.info("Starting typst watch for ${file.path} -> ${outputPdf.absolutePath}")
+        log.info("Project base path for ${file.path} -> ${project.basePath}")
         val commandLine = GeneralCommandLine(
-            typstBinary, "watch", file.path, outputPdf.absolutePath
+            buildList {
+                add(typstBinary)
+                add("watch")
+                project.basePath?.let { add("--root"); add(it) }
+                add(file.path)
+                add(outputPdf.absolutePath)
+            }
         ).apply {
             withCharset(Charsets.UTF_8)
             project.basePath?.let { withWorkDirectory(it) }
@@ -181,7 +189,7 @@ class TypstFilePreviewer(
                     val text = event.text.trim()
                     if (text.isEmpty()) return
 
-                    log.info("typst watch ${if (outputType == ProcessOutputTypes.STDERR) "stderr" else "stdout"}: $text")
+                    log.debug("typst watch ${if (outputType == ProcessOutputTypes.STDERR) "stderr" else "stdout"}: $text")
 
                     // Route all output to the Typst Output tool window
                     val contentType = when (outputType) {
@@ -202,12 +210,8 @@ class TypstFilePreviewer(
                     }
 
                     // When typst finishes a compilation, reload the PDF
-                    if (text.contains("writing to", ignoreCase = true) || text.contains(
-                            "compiled",
-                            ignoreCase = true
-                        )
-                    ) {
-                        log.info("Detected compilation output, reloading PDF for ${file.name}")
+                    if (text.contains("writing to", ignoreCase = true) ||
+                        text.contains("compiled", ignoreCase = true)) {
                         reloadPdf()
                     }
                 }
@@ -278,15 +282,17 @@ class TypstFilePreviewer(
         if (!jcefSupported || browser == null) return
         if (!outputPdf.exists() || outputPdf.length() == 0L) return
 
-        // Cache-bust: append a unique fragment so Chromium always re-reads from disk
-        val baseUrl = outputPdf.toURI().toString()
-        val fileUrl = "$baseUrl#t=${System.currentTimeMillis()}"
-        currentPdfUrl = baseUrl
-        log.info("Loading PDF: $fileUrl (size=${outputPdf.length()})")
+        val fileUrl = outputPdf.toURI().toString()
         ApplicationManager.getApplication().invokeLater {
             if (!project.isDisposed) {
-                browser.loadURL(fileUrl)
-                browser.cefBrowser.reloadIgnoreCache()
+                if (currentPdfUrl == fileUrl) {
+                    // Same file — just force Chromium to re-read from disk
+                    browser.cefBrowser.reloadIgnoreCache()
+                } else {
+                    // First load or different file
+                    currentPdfUrl = fileUrl
+                    browser.loadURL(fileUrl)
+                }
             }
         }
     }
