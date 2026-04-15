@@ -5,5 +5,5 @@
 .kotlin
 .qodana
 build
-.run
 .certs
+/.run/
