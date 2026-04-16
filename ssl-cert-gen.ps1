@@ -30,5 +30,9 @@ if ($env:OPENSSL_PASS.Length -lt 4) {
 # Generate the certificate chain
 & "C:\Program Files\Git\usr\bin\openssl.exe" req -key "${outDir}\private.pem" -new -x509 -days 365 -out "${outDir}\chain.crt"
 
+# Generate base64 versions for environments that need them (e.g. CI/CD secrets)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $outDir "chain.crt"))) | Set-Content -Path (Join-Path $outDir "chain_base64") -NoNewline
+[Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $outDir "private_encrypted.pem"))) | Set-Content -Path (Join-Path $outDir "private_encrypted_base64") -NoNewline
+
 # Clean up the environment variable so it doesn't linger
 Remove-Item Env:\OPENSSL_PASS

@@ -31,5 +31,9 @@ openssl rsa -in "$OUT_DIR/private_encrypted.pem" -out "$OUT_DIR/private.pem" -pa
 # Generate the certificate chain
 openssl req -key "$OUT_DIR/private.pem" -new -x509 -days 365 -out "$OUT_DIR/chain.crt"
 
+# Generate base64 versions for environments that need them (e.g. CI/CD secrets)
+openssl base64 -in "$OUT_DIR/chain.crt" -A -out "$OUT_DIR/chain_base64"
+openssl base64 -in "$OUT_DIR/private_encrypted.pem" -A -out "$OUT_DIR/private_encrypted_base64"
+
 # Clean up the environment variable so it doesn't linger
 unset OPENSSL_PASS
