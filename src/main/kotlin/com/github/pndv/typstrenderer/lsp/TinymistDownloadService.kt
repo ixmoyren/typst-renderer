@@ -130,15 +130,7 @@ class TinymistDownloadService {
                 .forceHttps(true)
                 .saveToFile(tempFile, indicator)
 
-            // Atomic-ish move: delete target first, then rename temp
-            if (target.exists()) {
-                target.delete()
-            }
-            if (!tempFile.renameTo(target)) {
-                // Fallback: copy + delete
-                tempFile.copyTo(target, overwrite = true)
-                tempFile.delete()
-            }
+            atomicMove(tempFile, target)
         } finally {
             // Clean up temp file if it still exists (e.g., on error)
             if (tempFile.exists()) {
@@ -160,6 +152,21 @@ class TinymistDownloadService {
     companion object {
         fun getInstance(): TinymistDownloadService =
             ApplicationManager.getApplication().getService(TinymistDownloadService::class.java)
+
+        /**
+         * Moves [tempFile] to [target], overwriting if [target] exists.
+         * Tries a fast rename first, falling back to copy + delete when the
+         * rename isn't possible (e.g. across filesystems).
+         */
+        internal fun atomicMove(tempFile: File, target: File) {
+            if (target.exists()) {
+                target.delete()
+            }
+            if (!tempFile.renameTo(target)) {
+                tempFile.copyTo(target, overwrite = true)
+                tempFile.delete()
+            }
+        }
 
         internal fun unsupportedPlatformMessage(): String {
             val os = System.getProperty("os.name")

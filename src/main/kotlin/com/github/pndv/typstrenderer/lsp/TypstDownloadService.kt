@@ -143,13 +143,7 @@ class TypstDownloadService {
                 .forceHttps(true)
                 .saveToFile(tempFile, indicator)
 
-            if (target.exists()) {
-                target.delete()
-            }
-            if (!tempFile.renameTo(target)) {
-                tempFile.copyTo(target, overwrite = true)
-                tempFile.delete()
-            }
+            TinymistDownloadService.atomicMove(tempFile, target)
         } finally {
             if (tempFile.exists()) {
                 tempFile.delete()

@@ -22,46 +22,20 @@ class TinymistManager {
     /**
      * Resolves the tinymist binary path, or null if not available anywhere.
      */
-    fun resolveTinymistPath(): String? {
-        // 1. User-configured path
-        val userPath = TypstSettingsState.getInstance().tinymistPath
-        if (userPath.isNotBlank() && isBinaryExecutable(File(userPath))) {
-            return userPath
-        }
-
-        // 2. Found on system PATH + well-known locations
-        findBinary("tinymist")?.let { return it }
-
-        // 3. Previously downloaded binary
-        val downloadedBinary = getDownloadedBinaryPath()
-        if (isBinaryExecutable(downloadedBinary)) {
-            return downloadedBinary.absolutePath
-        }
-
-        return null
-    }
+    fun resolveTinymistPath(): String? = resolveBinaryPath(
+        configuredPath = TypstSettingsState.getInstance().tinymistPath,
+        findOnPath = { findBinary("tinymist") },
+        downloadedBinary = getDownloadedBinaryPath(),
+    )
 
     /**
      * Resolves the typst CLI binary path, or null if not available.
      */
-    fun resolveTypstPath(): String? {
-        // 1. User-configured path
-        val userPath = TypstSettingsState.getInstance().typstPath
-        if (userPath.isNotBlank() && isBinaryExecutable(File(userPath))) {
-            return userPath
-        }
-
-        // 2. Found on system PATH + well-known locations
-        findBinary("typst")?.let { return it }
-
-        // 3. Previously downloaded binary
-        val downloadedBinary = getDownloadedTypstPath()
-        if (isBinaryExecutable(downloadedBinary)) {
-            return downloadedBinary.absolutePath
-        }
-
-        return null
-    }
+    fun resolveTypstPath(): String? = resolveBinaryPath(
+        configuredPath = TypstSettingsState.getInstance().typstPath,
+        findOnPath = { findBinary("typst") },
+        downloadedBinary = getDownloadedTypstPath(),
+    )
 
     /**
      * Returns the directory where the downloaded tinymist binary is stored.
@@ -125,6 +99,27 @@ class TinymistManager {
          * On Windows, [File.canExecute] returns true for any readable file with certain
          * extensions, so we additionally verify the file has a recognized executable extension.
          */
+        /**
+         * Pure-function core of the 3-stage binary resolution fallback.
+         * The instance methods [resolveTinymistPath] / [resolveTypstPath] are
+         * thin wrappers that supply the real settings, PATH lookup, and
+         * downloaded file. Exposed for unit testing without an IntelliJ fixture.
+         */
+        internal fun resolveBinaryPath(
+            configuredPath: String,
+            findOnPath: () -> String?,
+            downloadedBinary: File,
+        ): String? {
+            if (configuredPath.isNotBlank() && isBinaryExecutable(File(configuredPath))) {
+                return configuredPath
+            }
+            findOnPath()?.let { return it }
+            if (isBinaryExecutable(downloadedBinary)) {
+                return downloadedBinary.absolutePath
+            }
+            return null
+        }
+
         internal fun isBinaryExecutable(file: File): Boolean {
             if (!file.isFile) return false
             if (isWindows()) {
