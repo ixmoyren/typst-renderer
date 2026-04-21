@@ -19,6 +19,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.refactoring.rename.RenameHandler
 import org.eclipse.lsp4j.*
 import java.net.URI
+import java.nio.file.Paths
 
 private val LOG = logger<TypstLspRenameHandler>()
 
@@ -226,8 +227,7 @@ class TypstLspRenameHandler : RenameHandler {
      */
     internal fun findVirtualFile(uri: String): VirtualFile? {
         return try {
-            val path = URI(uri).path
-            VirtualFileManager.getInstance().findFileByUrl("file://$path")
+            VirtualFileManager.getInstance().findFileByNioPath(Paths.get(URI(uri)))
         } catch (e: Exception) {
             LOG.warn("Failed to resolve URI: $uri", e)
             null

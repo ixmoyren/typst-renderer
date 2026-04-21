@@ -19,6 +19,7 @@ import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.jsonrpc.messages.Either
+import org.eclipse.lsp4j.jsonrpc.messages.Either3
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 
@@ -170,7 +171,7 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
                     LocalFileSystem.getInstance().refreshAndFindFileByNioFile(tempFile)
                 } ?: fail("Could not resolve temp file in VFS")
 
-            val uri = "file://" + tempFile.toAbsolutePath().toString()
+            val uri = tempFile.toUri().toString()
 
             // Three edits on the same line, deliberately passed in forward order to verify
             // that the handler re-sorts them descending before applying.
@@ -218,14 +219,16 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
 
             myFixture.configureByText("current.typ", "#let foo<caret> = 1")
 
-            val uri = "file://" + tempFile.toAbsolutePath().toString().replace('\\', '/')
+            val uri = tempFile.toUri().toString()
             val workspaceEdit = WorkspaceEdit(
                 mapOf(
                     uri to listOf(TextEdit(Range(Position(0, 5), Position(0, 8)), "bar"))
                 )
             )
             val fakeServer = FakeLspServer(
-                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+                Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                    PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+                ),
                 workspaceEdit,
             )
             TestDialogManager.setTestInputDialog { "bar" }
@@ -255,8 +258,8 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
 
             myFixture.configureByText("current.typ", "#let foo<caret> = 1")
 
-            val uri1 = "file://" + file1.toAbsolutePath().toString().replace('\\', '/')
-            val uri2 = "file://" + file2.toAbsolutePath().toString().replace('\\', '/')
+            val uri1 = file1.toUri().toString()
+            val uri2 = file2.toUri().toString()
             val workspaceEdit = WorkspaceEdit()
             workspaceEdit.documentChanges = listOf(
                 Either.forLeft(
@@ -273,7 +276,9 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
                 ),
             )
             val fakeServer = FakeLspServer(
-                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+                Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                    PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+                ),
                 workspaceEdit,
             )
             TestDialogManager.setTestInputDialog { "bar" }
@@ -294,7 +299,9 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
     fun testRename_userCancelsDialog_noChangesApplied() {
         myFixture.configureByText("test.typ", "#let foo<caret> = 1")
         val fakeServer = FakeLspServer(
-            PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+            Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+            ),
         )
         TestDialogManager.setTestInputDialog { null }
 
@@ -320,7 +327,9 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
     fun testRename_renameRequestThrows_showsErrorNoChanges() {
         myFixture.configureByText("test.typ", "#let foo<caret> = 1")
         val fakeServer = FakeLspServer(
-            PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+            Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+            ),
             RuntimeException("timeout"),
         )
         TestDialogManager.setTestDialog(TestDialog.OK)
@@ -336,7 +345,9 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
     fun testRename_renameReturnsNullWorkspaceEdit_showsInfoNoChanges() {
         myFixture.configureByText("test.typ", "#let foo<caret> = 1")
         val fakeServer = FakeLspServer(
-            PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+            Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+            ),
             null,
         )
         TestDialogManager.setTestDialog(TestDialog.OK)
@@ -356,7 +367,9 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
             Either.forRight(RenameFile("file:///old.typ", "file:///new.typ")),
         )
         val fakeServer = FakeLspServer(
-            PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+            Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+            ),
             workspaceEdit,
         )
         TestDialogManager.setTestInputDialog { "bar" }
@@ -369,8 +382,11 @@ class TypstLspRenameHandlerTest : BasePlatformTestCase() {
     fun testRename_sameNameEntered_treatedAsCancel() {
         myFixture.configureByText("test.typ", "#let foo<caret> = 1")
         val fakeServer = FakeLspServer(
-            PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo"),
+            Either3.forSecond<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>(
+                PrepareRenameResult(Range(Position(0, 5), Position(0, 8)), "foo")
+            ),
         )
+        // currentName will fall back to getWordAtCaret → "foo" (the word at caret)
         TestDialogManager.setTestInputDialog { "foo" }  // same as current
 
         handler.performRenameWithServer(project, myFixture.editor, myFixture.file.virtualFile, fakeServer)
