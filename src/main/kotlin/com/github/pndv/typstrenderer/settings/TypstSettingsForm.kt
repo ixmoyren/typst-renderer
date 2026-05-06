@@ -36,7 +36,7 @@ class TypstSettingsForm : JPanel()  {
                 textFieldWithBrowseButton(
                     FileChooserDescriptorFactory.singleFile()
                         .withTitle("Select Tinymist Binary")
-                ).bindText(tinymistPath)
+                ).bindText(tinymistPath).comment("Path to the tinymist binary. Leave empty for auto-detection.")
             }
             row {
                 button("Download Tinymist") {
