@@ -41,11 +41,11 @@
 
         <!-- Settings -->
         <applicationService
-                serviceImplementation="com.github.pndv.typstrenderer.settings.TypstSettings"/>
+                serviceImplementation="com.github.pndv.typstrenderer.settings.TypstSettingsState"/>
         <applicationConfigurable
                 parentId="tools"
-                instance="com.github.pndv.typstrenderer.settings.TypstConfigurable"
-                id="com.github.pndv.typstrenderer.settings.TypstConfigurable"
+                instance="com.github.pndv.typstrenderer.settings.TypstSettingsConfigurable"
+                id="com.github.pndv.typstrenderer.settings.TypstSettingsConfigurable"
                 bundle="messages.TypstBundle" key="settings.displayName" />
 
 
@@ -70,7 +70,7 @@
                 implementation="com.github.pndv.typstrenderer.editor.PdfjsPreviewServer"/>
     </extensions>
 
-    <actions resource-bundle="messages.TypstActionsBundle">
+    <actions>
         <action id="Typst.Compile"
                 class="com.github.pndv.typstrenderer.actions.TypstCompileAction"
                 icon="AllIcons.Actions.Execute">
